@@ -31,4 +31,4 @@ In addition to drawing with the joystick, there are four keyboard commands for m
 
 When you’re ready to install the graphic in your own program, copy down the hex numbers by hand (there are only 8 of them!) or BREAK out the program and type_ ?A$_ to get the ATASCII version to export into your program. 
 
-Mini Character Editor fits in ten 120-character lines. Because it is not a game, i qualifies for the WILD category of the 10-line BASIC contest. I think it’s my first program to use a custom display list, which I (re?)learned about from the book ]The Creative Atari.](https://www.atariarchives.org/creativeatari/Modifying_Display_Memory.php)
+Mini Character Editor fits in ten 120-character lines. Because it is not a game, i qualifies for the WILD category of the 10-line BASIC contest. I think it’s my first program to use a custom display list, which I (re?)learned about from the book [The Creative Atari.](https://www.atariarchives.org/creativeatari/Modifying_Display_Memory.php)
