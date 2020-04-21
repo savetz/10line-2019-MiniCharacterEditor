@@ -1,0 +1,152 @@
+'mini character editor
+'Feb 3 2019 by @KevinSavetz
+'use joystick to design a character set character
+'H=horizontal flip, V=vertical flip
+'D=move everything down, R=move everything right
+
+DIM F$(8),F(9)
+'F in the main container for the data of the drawn character.
+'F$ contains the data in string format
+
+GR.3:POKE 752,1
+'start with BASIC mode 3, but we'll tweak that later. Turn off cursor.
+
+CH=(PEEK(106)-16)*256
+'space for custom character set
+
+SC=DPEEK(88)
+'top of screen RAM
+
+'set up display list
+DL=DPEEK(741):'display list
+POKE DL+16,4:'MODE 4 @ SC+100
+POKE DL+17,5:'MODE 5 @ SC+140
+POKE DL+18,6:'MODE 6(BASIC MODE 1) @ SC+180
+DPOKE DL+19,1799:'2 LINES OF MODE 7(BASIC MODE 2) @ SC+200 & SC+220
+DPOKE DL+21,514:'2 LINES OF MODE 2(BASIC MODE 0) @ SC+240 & SC+280
+POKE DL+23,0:'skip a line
+POKE DL+24,2:'2 LINES OF MODE 2(BASIC MODE 0) @ SC+320 & SC+360
+FOR I=25 TO 31:POKE DL+I,0:NEXT I:'many blank lines
+
+'print ! characters in the various screen modes
+FOR I=SC+100 TO SC+280 STEP 40
+	POKE I,1:POKE I+3,1:POKE I+4,1
+NEXT I
+'and some more in the text window
+?"! ! !!  !!!"
+?"  ! !!  !!!"
+
+'install RAM character set
+MOVE 57344,CH,1024
+
+'replace ! with our custom character
+MOVE ADR(F$),CH+8,8:POKE 756,CH/256
+
+'draw box around editing window
+COLOR 3:PLOT 0,0:DRAWTO 9,0:DRAWTO 9,9:DRAWTO 0,9:DRAWTO 0,0
+
+X=1:Y=1
+
+'main loop
+DO
+	IF R<0:'re-draw contents of editing window
+		FOR J = 1 TO 8:'for each row in the byte...
+			FOR I = 1 TO 8:'look at each bit...
+				COLOR SGN(F(J) & (2^((9-I)-1)))
+				'set color to 1 if the bit is set, 0 if not  
+				PLOT I,J:'draw the bit 
+			NEXT I
+		NEXT J
+	ENDIF
+
+	IF R:'if R<>0, update hex/ATASCII display
+		POKE $57,0:'prepare to print in text window
+		?CHR$(156);:'clear the text line
+		FOR I=1 TO 8
+			F$(I,I)=CHR$(F(I)):'copy the data to F$
+			?"\";HEX$(F(I));:'show the 8 bytes as hex
+		NEXT I:?" ";
+		FOR I=1 TO 8:'show the 8 bytes as ATASCII 
+			IF F(I)<>155
+				?CHR$(27);CHR$(F(I));:'normal case
+			 ELSE
+				?" ";:'if character is CR (27) show space instead. CR messes display.
+			 ENDIF
+		NEXT I
+		POKE $57,3:'back to drawing in GR.3
+
+		MOVE ADR(F$),CH+8,8:'copy the new character to the active character set
+	ENDIF
+
+	R=0:'redraw defaults to off
+
+	COLOR SGN(F(Y) & (2^((9-X)-1))): PLOT X,Y:'draw current bit
+	S=STICK(0):'get joystick position
+	Y=Y+((S=13)-(S=14)):'move up/down?
+	X=X+(S=7)-(S=11):'move left/right?
+	IF X<1:X=8:ENDIF:'stay in bounds of the drawning box
+	IF Y<1:Y=8:ENDIF
+	IF X>8:X=1:ENDIF
+	IF Y>8:Y=1:ENDIF
+
+	P=PEEK(764):'was a key pressed?
+	IF (P=58):'d to move everything down
+		FOR J=9 TO 1 STEP -1:'for each byte
+			F(J)=F(J-1):'copy every byte to next byte. F(9) is temp storage only.
+		NEXT J
+		F(1)=F(9):'move bottom line to top
+		R=-1:'put in order for full redraw
+	ENDIF
+
+	IF (P=40):'r to move everything right
+		FOR J=1 TO 8:'for each byte
+			Q=F(J) & 1:'copy rightmost bit (LSB) to temporary storage Q
+			F(J)=TRUNC(F(J)/2):'divide byte by 2 to shift bits right
+			F(J)= F(J) + 128*Q:'copy old rightmost bit to leftmost bit
+		NEXT J
+		R=-1:'put in order for full redraw
+	ENDIF
+	
+	IF (P=57):'h for horizontal flip
+		FOR J=1 TO 8:'for each byte
+			Q=0:'working byte
+			FOR I=1 TO 8:'for each bit in the byte
+				Q=Q+(SGN  (F(J) & (2^(I-1)))  * 2^((9-I)-1))
+				'add to working byte:
+				'  SGN [make 0 or 1] (
+				'  (the current row bitwise-and
+				'  the value of the current bit (1,2,4,8,16...)))
+				'  * the value of the opposite bit (128,64,16,8,4...)
+				'So: if the 1 bit is on, add 128 to the working byte,
+				'if the 2 bit is on, add 64 to the working byte, and so on.
+				'This was not easy to figure out, nor to figure out all over
+				'again the next day to write these comments
+			NEXT I
+			F(J)=Q:'install reversed byte
+		NEXT J
+		R=-1:'put in order for full redraw
+	ENDIF
+
+	IF (P=16):'v for vertical flip
+		FOR J=1 TO 4:'for bytes 1 to 4
+			Q=F(J):'temp copy of byte
+			F(J)=F(9-J):'copy 8 to 1, 7 to 2, 6 to 3, 5 to 4
+			F(9-J)=Q:'copy 1 to 8, 2 to 7, 3 to 6, 4 to 5
+		NEXT J
+		R=-1:'put in order for full redraw
+	ENDIF
+
+'	there was no room for this, but might be fun to add
+'	IF (PEEK(764)=45):'t to turn (rotate)
+'	ENDIF
+
+	POKE 764,255:'clear keyboard buffer
+
+	IF(STRIG(0)=0):'if trigger is pressed
+		F(Y) = F(Y) EXOR (2^((9-X)-1)):'toggle current bit
+		R=1:'only redraw hex/atascii		
+		PAUSE 4:'slow things down a tad
+	ENDIF
+	COLOR 2:PLOT X,Y:'show cursor
+	PAUSE 4
+LOOP
